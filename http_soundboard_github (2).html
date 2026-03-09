@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid Soundboard</title>
+<style>
+body{
+  margin:0;
+  font-family:Arial, Helvetica, sans-serif;
+  background:#0f0f0f;
+  color:white;
+  text-align:center;
+}
+
+header{
+  padding:15px;
+  font-size:22px;
+  font-weight:bold;
+}
+
+#upload{
+  margin-bottom:10px;
+}
+
+#board{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+  gap:12px;
+  padding:12px;
+}
+
+.pad{
+  background:#1e1e1e;
+  border-radius:14px;
+  padding:10px;
+  cursor:pointer;
+  user-select:none;
+  touch-action:manipulation;
+  border:2px solid transparent;
+}
+
+.pad-title{
+  font-size:14px;
+  margin-bottom:8px;
+  word-break:break-word;
+}
+
+.controls{
+  display:flex;
+  gap:6px;
+  justify-content:center;
+}
+
+.controls button{
+  border:none;
+  border-radius:8px;
+  padding:6px 8px;
+  font-size:12px;
+  cursor:pointer;
+}
+
+.play{background:#2a7cff;color:white}
+.pause{background:#ffaa00;color:black}
+.stop{background:#ff3b3b;color:white}
+
+.controls button:active{
+  transform:scale(0.92);
+}
+
+.dragging{
+  opacity:0.4;
+}
+
+.hint{
+  font-size:12px;
+  opacity:0.6;
+  margin-bottom:10px;
+}
+</style>
+</head>
+<body>
+
+<header>Soundboard</header>
+
+<input id="upload" type="file" accept="audio/mp3,audio/wav" multiple>
+<div class="hint">Play / Pause / Stop pro Sound • gedrückt halten + ziehen = verschieben</div>
+
+<div id="board"></div>
+
+<script>
+const board = document.getElementById("board")
+const upload = document.getElementById("upload")
+
+let sounds = JSON.parse(localStorage.getItem("soundboard") || "[]")
+
+// automatisch mp3 Dateien aus sounds.json laden (für GitHub Hosting)
+fetch("./sounds.json")
+  .then(r=>r.json())
+  .then(list=>{
+
+    list.forEach(file=>{
+
+      // nur hinzufügen wenn noch nicht vorhanden
+      if(!sounds.find(s=>s.name===file)){
+        sounds.push({
+          name:file.replace(/\.[^/.]+$/, ""),
+          data:file
+        })
+      }
+
+    })
+
+    render()
+
+  })
+  .catch(()=>{
+    render()
+  })
+
+function save(){
+  localStorage.setItem("soundboard",JSON.stringify(sounds))
+}
+
+function createPad(sound,index){
+
+  const pad=document.createElement("div")
+  pad.className="pad"
+  pad.draggable=true
+
+  const title=document.createElement("div")
+  title.className="pad-title"
+  title.textContent=sound.name
+
+  const controls=document.createElement("div")
+  controls.className="controls"
+
+  const play=document.createElement("button")
+  play.className="play"
+  play.textContent="▶"
+
+  const pause=document.createElement("button")
+  pause.className="pause"
+  pause.textContent="⏸"
+
+  const stop=document.createElement("button")
+  stop.className="stop"
+  stop.textContent="■"
+
+  const audio=new Audio(sound.data)
+
+  play.onclick=(e)=>{
+    e.stopPropagation()
+    audio.play()
+  }
+
+  pause.onclick=(e)=>{
+    e.stopPropagation()
+    audio.pause()
+  }
+
+  stop.onclick=(e)=>{
+    e.stopPropagation()
+    audio.pause()
+    audio.currentTime=0
+  }
+
+  controls.appendChild(play)
+  controls.appendChild(pause)
+  controls.appendChild(stop)
+
+  pad.appendChild(title)
+  pad.appendChild(controls)
+
+  pad.addEventListener("dragstart",()=>{
+    pad.classList.add("dragging")
+  })
+
+  pad.addEventListener("dragend",()=>{
+    pad.classList.remove("dragging")
+    updateOrder()
+  })
+
+  board.appendChild(pad)
+}
+
+function render(){
+  board.innerHTML=""
+  sounds.forEach(createPad)
+}
+
+function updateOrder(){
+  const pads=[...board.children]
+  const newSounds=[]
+
+  pads.forEach(p=>{
+    const name=p.querySelector('.pad-title').textContent
+    const s=sounds.find(x=>x.name===name)
+    if(s) newSounds.push(s)
+  })
+
+  sounds=newSounds
+  save()
+}
+
+board.addEventListener("dragover",e=>{
+  e.preventDefault()
+  const dragging=document.querySelector(".dragging")
+  const after=getDragAfter(e.clientY)
+
+  if(after==null){
+    board.appendChild(dragging)
+  }else{
+    board.insertBefore(dragging,after)
+  }
+})
+
+function getDragAfter(y){
+  const els=[...board.querySelectorAll(".pad:not(.dragging)")]
+
+  return els.reduce((closest,child)=>{
+    const box=child.getBoundingClientRect()
+    const offset=y-box.top-box.height/2
+
+    if(offset<0 && offset>closest.offset){
+      return {offset:offset,element:child}
+    }else{
+      return closest
+    }
+
+  },{offset:Number.NEGATIVE_INFINITY}).element
+}
+
+upload.addEventListener("change",()=>{
+  const files=[...upload.files]
+
+  files.forEach(file=>{
+
+    const reader=new FileReader()
+
+    reader.onload=e=>{
+
+      sounds.push({
+        name:file.name.replace(/\.[^/.]+$/, ""),
+        data:e.target.result
+      })
+
+      save()
+      render()
+
+    }
+
+    reader.readAsDataURL(file)
+
+  })
+})
+
+render()
+</script>
+
+</body>
+</html>
